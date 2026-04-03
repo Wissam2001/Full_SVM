@@ -4,7 +4,8 @@ This class implements a SVM from scratch, focusing on finding optimal hyperplane
 # Research Objectives 🎯
 
 # Libraries 📚
-- **Numpy:** used for data generation.
+- **Numpy:**
+- **bisect:**
 
 # Results and Analysis 📋
 
