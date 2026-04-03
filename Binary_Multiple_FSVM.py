@@ -187,7 +187,7 @@ class binary_Multiple_SVM:
 
             # Guard condition: If either class becomes empty after shrinking, break early.
             if X_neg_current.size == 0 or X_pos_current.size == 0:
-                print(f"Warning: One or both classes became empty after shrinking in iteration {i+1}. Stopping early.")
+                print(f"Warning: One or both classes became empty after shrinking in iteration {i+1}. Stopped early.")
                 break
             
         '''#at the end we select the coordenates with best entropy
