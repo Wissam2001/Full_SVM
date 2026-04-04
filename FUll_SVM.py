@@ -118,11 +118,6 @@ class binary_Multiple_SVM:
         if X.shape[0] != y.shape[0]:
             raise ValueError("Number of samples in X and y must match.")
 
-        #Making sure there are 2 classes
-        self.classes = np.unique(y)
-        if len(self.classes) != 2:
-            raise ValueError(f"Expected exactly 2 classes, but found {len(self.classes)}: {self.classes}")
-
         # Convert labels to binary (-1 or 1) for internal calculation.
         # The first unique class found is mapped to 1, the second to -1.
         y_binary = np.where(y == self.classes[0], 1, -1).reshape(-1, 1)
@@ -153,6 +148,11 @@ class binary_Multiple_SVM:
         if X_neg_current.size == 0 or X_pos_current.size == 0:
             raise ValueError("Both positive and negative classes must be present in the training data.")
 
+
+        #convrt targets to column vectors
+        #Y_neg = Y_neg.reshape(-1,1)
+        #Y_pos = Y_pos.reshape(-1,1)
+        #y_ = y_.reshape(-1,1)
         
         optimal_entropy = float('inf') # Initialize with positive infinity for minimization
         # Iteratively refine w and b
@@ -204,8 +204,8 @@ class binary_Multiple_SVM:
             #return_approx (bool): If True, returns the raw decision function values (approximate values).
                                   #If False, returns the predicted class labels.
 
-        if self.w is None or self.b is None or self.classes is None:
-            raise RuntimeError("Model has not been fitted yet. Call .fit() first.")
+        '''if self.w is None or self.b is None or self.classes is None:
+            raise RuntimeError("Model has not been fitted yet. Call .fit() first.")'''
         if not isinstance(X, np.ndarray) or X.ndim != 2:
             raise ValueError("Input X for prediction must be a 2D numpy array.")
         if X.shape[1] != self.w.shape[0]:
@@ -225,8 +225,8 @@ class binary_Multiple_SVM:
     def decision_score(self, X):
         #Calculates the decision score (distance from the hyperplane) for new data points.
 
-        if self.w is None or self.b is None:
-            raise RuntimeError("Model has not been fitted yet. Call .fit() first.")
+        '''if self.w is None or self.b is None:
+            raise RuntimeError("Model has not been fitted yet. Call .fit() first.")'''
         if not isinstance(X, np.ndarray) or X.ndim != 2:
             raise ValueError("Input X for decision_score must be a 2D numpy array.")
         if X.shape[1] != self.w.shape[0]:
