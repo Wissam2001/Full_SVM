@@ -1,235 +1,286 @@
-class binary_Multiple_SVM:
-    def __init__(self, num_iterations=5, threshold = None):
-        #Args:
-            #num_iterations (int): Number of iterations for hyperparameter calculation
-            #threshold (float, optional): Threshold for filtering projected data points during 'b' calculation. Defaults to None
+import numpy as np
+import bisect
+from itertools import combinations
+
+class MultiClassFSVM:
+    """
+    A multi-class Support Vector Machine (SVM) implementation using the One-vs-One (OvO) strategy.
+    This class refactors a binary SVM approach to handle multiple classes with robust error handling.
+    In OvO strategy, a binary classifier is trained for each pair of classes.
+    """
+
+    def __init__(self, num_iterations=5, threshold=None):
+        """
+        Initializes the MultiClassSVM.
+
+        Args:
+            num_iterations (int): Number of iterations for refining the weight vector and bias.
+            threshold (float, optional): Threshold for filtering projected data points during bias calculation.
+        """
+        if not isinstance(num_iterations, int) or num_iterations <= 0:
+            raise ValueError("num_iterations must be a positive integer.")
         
+        if threshold is not None and (not isinstance(threshold, (int, float)) or threshold < 0):
+            raise ValueError("threshold must be a non-negative number.")
+
         self.num_iterations = num_iterations
-        self.threshold = threshold 
-        self.w = None
-        self.b = None
+        self.threshold = threshold
+        self.classifiers = []  # Stores (class_i, class_j, w, b) for each pair
         self.classes = None
-        
+        self.n_features = None
 
-    # Calculates the weight vector (w) and bias (b) for the SVM
-    def get_coordinates(self, X, y_, X_neg, X_pos, Y_neg, Y_pos):
-        #Args:
-            #X (np.ndarray): The input feature matrix.
-            #y_ (np.ndarray): The binary labels (-1 or 1) corresponding to X
-            #X_neg (np.ndarray): Feature vectors for negative class samples
-            #X_pos (np.ndarray): Feature vectors for positive class samples
-            #Y_neg (np.ndarray): Labels for negative class samples (all -1)
-            #Y_pos (np.ndarray): Labels for positive class samples (all 1)
+    def _get_coordinates(self, X, y_binary, X_neg, X_pos):
+        """
+        Internal method to calculate weight vector (w) and bias (b) for a binary sub-problem.
+        """
+        # Calculate w: pointing from negative class center to positive class center
+        w = np.mean(X_pos, axis=0) - np.mean(X_neg, axis=0)
+        w = w.reshape(-1, 1)
         
-        #Calculating W and normalizing it
-        w = (X_pos.T @ Y_pos) + (X_neg.T @ Y_neg)
-        
-        # Handle cases where w might be a zero vector to prevent division by zero
         norm = np.linalg.norm(w)
-        if norm > 0:
+        if norm > 1e-12:
             w = w / norm
-        
-        
-        # Calculating b (bias term)
-        # Step 1: Project data onto the weight vector 'w'
-        XP = X @ w 
-        
-        # Step 2: Sort the projected data and their corresponding labels
-        ind = np.argsort(XP.flatten())  # Get sorted indices
-        XP_sorted = XP[ind]  # Sort XP
-        YP_sorted = y_[ind]  # Sort Y according to XP
-
-        #Apply thresholding if specified to focus on points near the decision boundary.
-        if self.threshold !=  None:
-            # Keep only the data points in the interval [-threshold, +threshold]
-            XP_threshold = XP_sorted[(XP_sorted >= -self.threshold) & (XP_sorted <= self.threshold)]
         else:
-            # If no threshold is set, consider all data points.
+            w = np.zeros_like(w)
+        
+        # Project full training set onto w
+        XP = X @ w
+        ind = np.argsort(XP.flatten())
+        XP_sorted = XP[ind].flatten()
+        YP_sorted = y_binary[ind].flatten()
+
+        # Apply thresholding
+        if self.threshold is not None:
+            mask = (XP_sorted >= -self.threshold) & (XP_sorted <= self.threshold)
+            XP_threshold = XP_sorted[mask]
+        else:
             XP_threshold = XP_sorted
 
-        
-        # Guard condition: If XP_threshold is empty after filtering, we cannot determine 'b'
-        if XP_threshold.size == 0:
-            #Return a default 0 for b and a high entropy to indicate a poor separation.
-            return w, 0.0, float('inf')
-            
-        optimal_entropy = float('inf') # Initialize with positive infinity for minimization
-        b = 0.0 # Default bias term
+        # Error handling for empty threshold array
+        if XP_threshold.size < 2:
+            raise ValueError(
+                f"Threshold {self.threshold} is too restrictive, resulting in "
+                f"{XP_threshold.size} points. Cannot calculate optimal bias 'b'."
+            )
 
-        # Iterate through potential split points (midpoints between sorted projected data points)
-        #to find the 'b' that minimizes the weighted entropy
+        optimal_entropy = float('inf')
+        b = 0.0
         num_threshold_points = len(XP_threshold)
-        
-        for i in range(num_threshold_points - 1):
-            # Get the i-th midpoint as a splitting threshold 'T'
-            T = (XP_threshold[i] + XP_threshold[i+1]) / 2
 
-            # Find the index 'j' in the *original sorted projected data* (XP_sorted)
-            # where 'T' would be inserted, effectively splitting the data
+        for i in range(num_threshold_points - 1):
+            T = (XP_threshold[i] + XP_threshold[i+1]) / 2
             j = bisect.bisect_left(XP_sorted, T)
             
-            # Split data into left and right based on the threshold 'T'
-            # 'left_YP' contains labels for samples <= T, 'right_YP' for samples > T
             left_YP = YP_sorted[:j]
             right_YP = YP_sorted[j:]
             
-            # Compute entropy for the LEFT split
-            n_left = len(left_YP) + 1e-11 #epsilon to denominators to prevent division by zero
-            p_left_neg = np.sum(left_YP == -1) / n_left
-            p_left_pos = 1 - p_left_neg
-            H_left = 0
-            if p_left_neg > 0 and p_left_pos > 0:
-                H_left = -p_left_neg * np.log2(p_left_neg) - p_left_pos * np.log2(p_left_pos)
+            if left_YP.size == 0 or right_YP.size == 0:
+                continue
 
-            # Compute entropy for the RIGHT split
-            n_right = len(right_YP) + 1e-11
-            p_right_neg = np.sum(right_YP == -1) / n_right
-            p_right_pos = 1 - p_right_neg
-            H_right = 0
-            if p_right_neg > 0 and p_right_pos > 0:
-                H_right = -p_right_neg * np.log2(p_right_neg) - p_right_pos * np.log2(p_right_pos)
+            def calculate_entropy(labels):
+                n = labels.size
+                p_pos = np.sum(labels == 1) / n
+                p_neg = 1 - p_pos
+                if p_pos <= 0 or p_pos >= 1:
+                    return 0
+                return -p_pos * np.log2(p_pos) - p_neg * np.log2(p_neg)
 
+            H_left = calculate_entropy(left_YP)
+            H_right = calculate_entropy(right_YP)
             
-            # Calculate the weighted entropy for the current split.
-            # This represents the impurity of the split, aiming to minimize it.
-            total_samples = len(XP) + 1e-11
-            weighted_entropy = (n_left / total_samples) * H_left + \
-                               (n_right / total_samples) * H_right
+            total_samples = left_YP.size + right_YP.size
+            weighted_entropy = (left_YP.size / total_samples) * H_left + (right_YP.size / total_samples) * H_right
 
-            # Keep track of the split that yields the smallest entropy.
             if weighted_entropy < optimal_entropy:
                 optimal_entropy = weighted_entropy
-                b = -T # The bias 'b' is the negative of the optimal threshold 'T'
-        
+                b = -T
+
         return w, b, optimal_entropy
 
-    def fit(self, X, y):
-        #Args:
-            #X (np.ndarray): The training feature matrix.
-            #y (np.ndarray): The training labels.
+    def _fit_binary(self, X, y_binary):
+        """
+        Fits a single binary SVM model for a pair of classes.
+        """
+        X_neg_initial = X[y_binary.flatten() == -1]
+        X_pos_initial = X[y_binary.flatten() == 1]
 
-        #Raises:
-            #ValueError: If the input data `X` or labels `y` are not valid (e.g., empty, wrong shape).
-        
-        if not isinstance(X, np.ndarray) or X.ndim != 2 or X.size == 0:
-            raise ValueError("Input X must be a non-empty 2D numpy array.")
-        if not isinstance(y, np.ndarray) or y.ndim != 1 or y.size == 0:
-            raise ValueError("Input y must be a non-empty 1D numpy array.")
-        if X.shape[0] != y.shape[0]:
-            raise ValueError("Number of samples in X and y must match.")
+        if X_neg_initial.size == 0 or X_pos_initial.size == 0:
+            raise ValueError("Both classes must be present to fit the model.")
 
-        # Convert labels to binary (-1 or 1) for internal calculation.
-        # The first unique class found is mapped to 1, the second to -1.
-        y_binary = np.where(y == self.classes[0], 1, -1).reshape(-1, 1)
-                                                                 
-        '''# Check if the array has more than two dimensions
-        n_samples, n_features = X.shape
-        #self.w = np.zeros((n_classes, n_features, 1))
-        #self.b = np.zeros(n_classes)
-        
-        X = np.array(X)
-        y = np.array(y)
+        X_neg_current = X_neg_initial
+        X_pos_current = X_pos_initial
 
-        #for j, cls in enumerate(self.classes):
-        # Create binary labels for current class (1 for cls, -1 otherwise)
-        y_ = np.where(y == self.classes[0], 1, -1)'''
-        
-        # Initialize lists to store coordinates (w, b, entropy) from each iteration.
-        #all_coordinates = []
+        best_w, best_b, min_entropy = None, None, float('inf')
 
-        # Initial split of data into positive and negative samples.
-        X_neg_current = X[y_binary.flatten() == -1]
-        X_pos_current = X[y_binary.flatten() == 1]
-
-        Y_neg_current = -np.ones((len(X_neg_current), 1))
-        Y_pos_current = np.ones((len(X_pos_current), 1))
-
-        # Guard condition: Ensure both positive and negative classes are present.
-        if X_neg_current.size == 0 or X_pos_current.size == 0:
-            raise ValueError("Both positive and negative classes must be present in the training data.")
-
-
-        #convrt targets to column vectors
-        #Y_neg = Y_neg.reshape(-1,1)
-        #Y_pos = Y_pos.reshape(-1,1)
-        #y_ = y_.reshape(-1,1)
-        
-        optimal_entropy = float('inf') # Initialize with positive infinity for minimization
-        # Iteratively refine w and b
         for i in range(self.num_iterations):
-            w, b, entropy = self.get_coordinates(X, y_binary, X_neg_current, X_pos_current, Y_neg_current, Y_pos_current)
-            #all_coordinates.append([w, b, entropy])
-        
-
-            #Calculate distances to the current hyperplane for both positive and negative samples.
-            # These distances help identify the 'closest' points for the next iteration.
-            d_pos = X_pos_current @ w + b
-            d_neg = X_neg_current @ w + b
-            
-            # Sort points by their distance to the hyperplane.
-            # We keep half of the data that is closest to the margin (smallest absolute distance).
-            pos_indices_sorted = np.argsort(np.abs(d_pos).flatten())
-            neg_indices_sorted = np.argsort(np.abs(d_neg).flatten())
-            
-            # Select the half of the data points closest to the decision boundary.
-            X_pos_current = X_pos_current[pos_indices_sorted[:len(X_pos_current) // 2]]
-            X_neg_current = X_neg_current[neg_indices_sorted[:len(X_neg_current) // 2]]
-            
-            # Re-create labels for the selected subset of data.
-            Y_neg_current = -np.ones((len(X_neg_current), 1))
-            Y_pos_current = np.ones((len(X_pos_current), 1))
-
-
-            if optimal_entropy > entropy:
-                optimal_entropy = entropy
-                self.w = w
-                self.b = b
-
-            # Guard condition: If either class becomes empty after shrinking, break early.
-            if X_neg_current.size == 0 or X_pos_current.size == 0:
-                print(f"Warning: One or both classes became empty after shrinking in iteration {i+1}. Stopped early.")
+            try:
+                w, b, entropy = self._get_coordinates(X, y_binary, X_neg_current, X_pos_current)
+            except ValueError as e:
+                if i == 0: raise e
                 break
+
+            if entropy < min_entropy:
+                min_entropy = entropy
+                best_w, best_b = w, b
+
+            # Refine dataset for the next iteration by selecting points closest to the current boundary
+            d_pos = (X_pos_current @ w + b).flatten()
+            d_neg = (X_neg_current @ w + b).flatten()
             
-        '''#at the end we select the coordenates with best entropy
-        entropy_column = [sublist[2] for sublist in coordenates]
-        #print(entropy_column)
-        optimal_indx = np.argmin(entropy_column)
-        #print(optimal_indx)
-        self.w = coordenates[optimal_indx][0]
-        self.b = coordenates[optimal_indx][1]'''
+            # Keep at least 2 points per class to allow further iterations
+            new_pos_count = max(2, len(X_pos_current) // 2)
+            new_neg_count = max(2, len(X_neg_current) // 2)
+            
+            pos_indices = np.argsort(np.abs(d_pos))[:new_pos_count]
+            neg_indices = np.argsort(np.abs(d_neg))[:new_neg_count]
+            
+            X_pos_current = X_pos_current[pos_indices]
+            X_neg_current = X_neg_current[neg_indices]
+
+            if X_pos_current.size < 2 or X_neg_current.size < 2:
+                break
+
+        if best_w is None:
+            raise ValueError("Failed to find a suitable hyperplane during training.")
+
+        return best_w, best_b
+
+    def fit(self, X, y):
+        """
+        Fits the multi-class SVM using One-vs-One strategy.
+        Trains a binary classifier for every pair of classes.
+
+        Args:
+            X (np.ndarray): Training features of shape (n_samples, n_features).
+            y (np.ndarray): Training labels of shape (n_samples,).
+        """
+        if not isinstance(X, np.ndarray) or X.ndim != 2 or X.size == 0:
+            raise ValueError("X must be a non-empty 2D numpy array.")
+        if not isinstance(y, np.ndarray) or y.ndim != 1 or y.size == 0:
+            raise ValueError("y must be a non-empty 1D numpy array.")
+        if X.shape[0] != y.shape[0]:
+            raise ValueError(f"X and y must have the same number of samples.")
+
+        self.classes = np.unique(y)
+        self.n_features = X.shape[1]
+        self.classifiers = []
+
+        if len(self.classes) < 2:
+            raise ValueError("At least 2 unique classes are required for SVM fitting.")
+
+        # One-vs-One Strategy: Train one classifier per pair of classes
+        for class_i, class_j in combinations(self.classes, 2):
+            # Create binary labels for this pair: class_i = +1, class_j = -1
+            mask = (y == class_i) | (y == class_j)
+            X_pair = X[mask]
+            y_pair = y[mask]
+            
+            y_binary = np.where(y_pair == class_i, 1, -1).reshape(-1, 1)
+            
+            try:
+                w, b = self._fit_binary(X_pair, y_binary)
+                self.classifiers.append((class_i, class_j, w, b))
+            except ValueError as e:
+                print(f"Warning: Could not train classifier for pair ({class_i}, {class_j}): {e}")
+
+        if not self.classifiers:
+            raise RuntimeError("No classifiers were successfully trained.")
+
+    def decision_function(self, X):
+        """
+        Computes the decision scores for each class using voting mechanism.
+        In OvO, we count votes: each classifier votes for its predicted class.
+
+        Args:
+            X (np.ndarray): Input features of shape (n_samples, n_features).
+        
+        Returns:
+            np.ndarray: Decision scores of shape (n_samples, n_classes).
+                        Higher score indicates stronger confidence for that class.
+        """
+        if not self.classifiers:
+            raise RuntimeError("The model has not been fitted yet. Call .fit() first.")
+        if not isinstance(X, np.ndarray) or X.ndim != 2:
+            raise ValueError("Input X must be a 2D numpy array.")
+        if X.shape[1] != self.n_features:
+            raise ValueError(f"Input X has {X.shape[1]} features, but model was trained with {self.n_features}.")
+
+        n_samples = X.shape[0]
+        n_classes = len(self.classes)
+        
+        # Initialize vote counts and confidence scores
+        votes = np.zeros((n_samples, n_classes))
+        confidence = np.zeros((n_samples, n_classes))
+        
+        # Each classifier votes for one of its two classes
+        for class_i, class_j, w, b in self.classifiers:
+            # Calculate decision value (signed distance from hyperplane)
+            decision_values = (X @ w + b).flatten()
+            
+            # Positive decision value -> class_i, negative -> class_j
+            votes_for_i = (decision_values > 0).astype(int)
+            votes_for_j = (decision_values <= 0).astype(int)
+            
+            # Map class indices
+            idx_i = np.where(self.classes == class_i)[0][0]
+            idx_j = np.where(self.classes == class_j)[0][0]
+            
+            votes[:, idx_i] += votes_for_i
+            votes[:, idx_j] += votes_for_j
+            
+            # Accumulate confidence (absolute decision value as confidence measure)
+            confidence[:, idx_i] += votes_for_i * np.abs(decision_values)
+            confidence[:, idx_j] += votes_for_j * np.abs(decision_values)
+        
+        # Return confidence scores (can be used for more nuanced predictions)
+        # For pure voting, you could just return votes, but confidence provides more information
+        return confidence
+
+    def predict(self, X):
+        """
+        Predicts class labels for the input features using majority voting.
+
+        Args:
+            X (np.ndarray): Input features of shape (n_samples, n_features).
+        
+        Returns:
+            np.ndarray: Predicted class labels of shape (n_samples,).
+        """
+        scores = self.decision_function(X)
+        
+        # In OvO, the class with the highest confidence score wins
+        # (or you could use pure voting by using votes instead of confidence)
+        class_indices = np.argmax(scores, axis=1)
+        return self.classes[class_indices]
     
-    def predict(self, X, return_approx=False):
-        #Args:
-            #X (np.ndarray): The input feature matrix for prediction.
-            #return_approx (bool): If True, returns the raw decision function values (approximate values).
-                                  #If False, returns the predicted class labels.
-
-        '''if self.w is None or self.b is None or self.classes is None:
-            raise RuntimeError("Model has not been fitted yet. Call .fit() first.")'''
-        if not isinstance(X, np.ndarray) or X.ndim != 2:
-            raise ValueError("Input X for prediction must be a 2D numpy array.")
-        if X.shape[1] != self.w.shape[0]:
-            raise ValueError(f"Input X has {X.shape[1]} features, but model was trained with {self.w.shape[0]} features.")
-
+    def predict_with_voting(self, X):
+        """
+        Predicts class labels using pure majority voting (without confidence weighting).
         
-        # Calculate the decision function value (distance from hyperplane)
-        approx = X @ self.w + self.b
+        Args:
+            X (np.ndarray): Input features of shape (n_samples, n_features).
         
-        if return_approx:
-            return approx
-
-        # Map the decision function values to the original class labels
-        return np.where(approx >= 0, self.classes[0], self.classes[1])
-
+        Returns:
+            np.ndarray: Predicted class labels of shape (n_samples,).
+        """
+        if not self.classifiers:
+            raise RuntimeError("The model has not been fitted yet. Call .fit() first.")
         
-    def decision_score(self, X):
-        #Calculates the decision score (distance from the hyperplane) for new data points.
-
-        '''if self.w is None or self.b is None:
-            raise RuntimeError("Model has not been fitted yet. Call .fit() first.")'''
-        if not isinstance(X, np.ndarray) or X.ndim != 2:
-            raise ValueError("Input X for decision_score must be a 2D numpy array.")
-        if X.shape[1] != self.w.shape[0]:
-            raise ValueError(f"Input X has {X.shape[1]} features, but model was trained with {self.w.shape[0]} features.")
-
-        return X @ self.w + self.b
+        n_samples = X.shape[0]
+        n_classes = len(self.classes)
+        votes = np.zeros((n_samples, n_classes))
+        
+        for class_i, class_j, w, b in self.classifiers:
+            decision_values = (X @ w + b).flatten()
+            
+            votes_for_i = (decision_values > 0).astype(int)
+            votes_for_j = (decision_values <= 0).astype(int)
+            
+            idx_i = np.where(self.classes == class_i)[0][0]
+            idx_j = np.where(self.classes == class_j)[0][0]
+            
+            votes[:, idx_i] += votes_for_i
+            votes[:, idx_j] += votes_for_j
+        
+        class_indices = np.argmax(votes, axis=1)
+        return self.classes[class_indices]
