@@ -2,7 +2,7 @@ import numpy as np
 import bisect
 from itertools import combinations
 
-class MultiClass_FullSVM:
+class Full_SVM:
 
     def __init__(self, num_iterations=5, threshold=None):
         #Args:
