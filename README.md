@@ -7,7 +7,7 @@ This class implements a Support Vector Machine (SVM) from scratch, focusing on f
 - **Multi-class support** with One-vs-One strategies
 - **Robust error handling** and input validation
 - **Threshold filtering** for bias calculation on projected data
-- **Support Two voting** For voting with distance into consederation (decision value), or voting only
+- **Support Two voting:** Choose between confidence-weighted voting (using decision values) and pure majority voting.
 
 # Research Objectives 🎯
 1. **Develop a computationally efficient SVM**
