@@ -2,21 +2,14 @@ import numpy as np
 import bisect
 from itertools import combinations
 
-class MultiClassFSVM:
-    """
-    A multi-class Support Vector Machine (SVM) implementation using the One-vs-One (OvO) strategy.
-    This class refactors a binary SVM approach to handle multiple classes with robust error handling.
-    In OvO strategy, a binary classifier is trained for each pair of classes.
-    """
+class MultiClass_FullSVM:
 
     def __init__(self, num_iterations=5, threshold=None):
-        """
-        Initializes the MultiClassSVM.
-
-        Args:
-            num_iterations (int): Number of iterations for refining the weight vector and bias.
-            threshold (float, optional): Threshold for filtering projected data points during bias calculation.
-        """
+        #Args:
+            #num_iterations (int): Number of iterations for calculating the weight vector and bias.
+            #threshold (float, optional): Threshold for filtering projected data points for bias calculation.
+            
+        
         if not isinstance(num_iterations, int) or num_iterations <= 0:
             raise ValueError("num_iterations must be a positive integer.")
         
@@ -29,14 +22,14 @@ class MultiClassFSVM:
         self.classes = None
         self.n_features = None
 
-    def _get_coordinates(self, X, y_binary, X_neg, X_pos):
-        """
-        Internal method to calculate weight vector (w) and bias (b) for a binary sub-problem.
-        """
+    #Function to calculate weight vector (w) and bias (b) for a binary sub-problem
+    def get_coordinates(self, X, y_binary, X_neg, X_pos):
+        
         # Calculate w: pointing from negative class center to positive class center
         w = np.mean(X_pos, axis=0) - np.mean(X_neg, axis=0)
         w = w.reshape(-1, 1)
-        
+
+        #Avoiding dividing if the norm is 0
         norm = np.linalg.norm(w)
         if norm > 1e-12:
             w = w / norm
@@ -59,24 +52,28 @@ class MultiClassFSVM:
         # Error handling for empty threshold array
         if XP_threshold.size < 2:
             raise ValueError(
-                f"Threshold {self.threshold} is too restrictive, resulting in "
-                f"{XP_threshold.size} points. Cannot calculate optimal bias 'b'."
+                f"Threshold {self.threshold} is too restrictive, resulting in {XP_threshold.size} points.
+                Cannot calculate optimal bias 'b'."
             )
 
+        #Initialization
         optimal_entropy = float('inf')
         b = 0.0
         num_threshold_points = len(XP_threshold)
 
+        
         for i in range(num_threshold_points - 1):
-            T = (XP_threshold[i] + XP_threshold[i+1]) / 2
+            T = (XP_threshold[i] + XP_threshold[i+1]) / 2   #midpoint
             j = bisect.bisect_left(XP_sorted, T)
-            
+
+            #Splitting 
             left_YP = YP_sorted[:j]
             right_YP = YP_sorted[j:]
             
             if left_YP.size == 0 or right_YP.size == 0:
                 continue
 
+            #Calculate entropy 
             def calculate_entropy(labels):
                 n = labels.size
                 p_pos = np.sum(labels == 1) / n
@@ -91,16 +88,17 @@ class MultiClassFSVM:
             total_samples = left_YP.size + right_YP.size
             weighted_entropy = (left_YP.size / total_samples) * H_left + (right_YP.size / total_samples) * H_right
 
+            #Choose the best b according to the minimum entropy
             if weighted_entropy < optimal_entropy:
                 optimal_entropy = weighted_entropy
                 b = -T
 
         return w, b, optimal_entropy
 
-    def _fit_binary(self, X, y_binary):
-        """
-        Fits a single binary SVM model for a pair of classes.
-        """
+    #Fits a single binary SVM model for a pair of classes.
+    def fit_binary(self, X, y_binary):
+
+        #Splitting data into binary classes
         X_neg_initial = X[y_binary.flatten() == -1]
         X_pos_initial = X[y_binary.flatten() == 1]
 
@@ -110,17 +108,17 @@ class MultiClassFSVM:
         X_neg_current = X_neg_initial
         X_pos_current = X_pos_initial
 
-        best_w, best_b, min_entropy = None, None, float('inf')
+        best_w, best_b, optimal_entropy = None, None, float('inf')
 
         for i in range(self.num_iterations):
             try:
-                w, b, entropy = self._get_coordinates(X, y_binary, X_neg_current, X_pos_current)
+                w, b, entropy = self.get_coordinates(X, y_binary, X_neg_current, X_pos_current)
             except ValueError as e:
                 if i == 0: raise e
                 break
 
-            if entropy < min_entropy:
-                min_entropy = entropy
+            if entropy < optimal_entropy:
+                optimal_entropy = entropy
                 best_w, best_b = w, b
 
             # Refine dataset for the next iteration by selecting points closest to the current boundary
@@ -145,15 +143,12 @@ class MultiClassFSVM:
 
         return best_w, best_b
 
+    #Fit multi-class SVM using One-vs-One 
     def fit(self, X, y):
-        """
-        Fits the multi-class SVM using One-vs-One strategy.
-        Trains a binary classifier for every pair of classes.
-
-        Args:
-            X (np.ndarray): Training features of shape (n_samples, n_features).
-            y (np.ndarray): Training labels of shape (n_samples,).
-        """
+        #Args:
+            #X (np.ndarray): Training features of shape (n_samples, n_features).
+            #y (np.ndarray): Training labels of shape (n_samples,).
+        
         if not isinstance(X, np.ndarray) or X.ndim != 2 or X.size == 0:
             raise ValueError("X must be a non-empty 2D numpy array.")
         if not isinstance(y, np.ndarray) or y.ndim != 1 or y.size == 0:
@@ -168,7 +163,8 @@ class MultiClassFSVM:
         if len(self.classes) < 2:
             raise ValueError("At least 2 unique classes are required for SVM fitting.")
 
-        # One-vs-One Strategy: Train one classifier per pair of classes
+        # One-vs-One: Train one classifier per pair of classes
+        #create pairs
         for class_i, class_j in combinations(self.classes, 2):
             # Create binary labels for this pair: class_i = +1, class_j = -1
             mask = (y == class_i) | (y == class_j)
@@ -178,7 +174,7 @@ class MultiClassFSVM:
             y_binary = np.where(y_pair == class_i, 1, -1).reshape(-1, 1)
             
             try:
-                w, b = self._fit_binary(X_pair, y_binary)
+                w, b = self.fit_binary(X_pair, y_binary)
                 self.classifiers.append((class_i, class_j, w, b))
             except ValueError as e:
                 print(f"Warning: Could not train classifier for pair ({class_i}, {class_j}): {e}")
@@ -186,18 +182,15 @@ class MultiClassFSVM:
         if not self.classifiers:
             raise RuntimeError("No classifiers were successfully trained.")
 
+    #Computes the decision scores for each class using voting mechanism.
     def decision_function(self, X):
-        """
-        Computes the decision scores for each class using voting mechanism.
-        In OvO, we count votes: each classifier votes for its predicted class.
-
-        Args:
-            X (np.ndarray): Input features of shape (n_samples, n_features).
+        #Args:
+            #X (np.ndarray): Input features of shape (n_samples, n_features).
         
-        Returns:
-            np.ndarray: Decision scores of shape (n_samples, n_classes).
-                        Higher score indicates stronger confidence for that class.
-        """
+        #Returns:
+            #np.ndarray: Decision scores of shape (n_samples, n_classes).
+                        #Higher score indicates stronger confidence for that class.
+        
         if not self.classifiers:
             raise RuntimeError("The model has not been fitted yet. Call .fit() first.")
         if not isinstance(X, np.ndarray) or X.ndim != 2:
@@ -237,32 +230,17 @@ class MultiClassFSVM:
         return confidence
 
     def predict(self, X):
-        """
-        Predicts class labels for the input features using majority voting.
-
-        Args:
-            X (np.ndarray): Input features of shape (n_samples, n_features).
         
-        Returns:
-            np.ndarray: Predicted class labels of shape (n_samples,).
-        """
         scores = self.decision_function(X)
         
         # In OvO, the class with the highest confidence score wins
-        # (or you could use pure voting by using votes instead of confidence)
         class_indices = np.argmax(scores, axis=1)
         return self.classes[class_indices]
-    
+
+    #Predicts class labels using pure majority voting (without confidence weighting).
     def predict_with_voting(self, X):
-        """
-        Predicts class labels using pure majority voting (without confidence weighting).
         
-        Args:
-            X (np.ndarray): Input features of shape (n_samples, n_features).
         
-        Returns:
-            np.ndarray: Predicted class labels of shape (n_samples,).
-        """
         if not self.classifiers:
             raise RuntimeError("The model has not been fitted yet. Call .fit() first.")
         
