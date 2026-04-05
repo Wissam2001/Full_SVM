@@ -20,7 +20,7 @@ The weight vector `w` is computed as the normalized difference between class mea
 $w = (mean(X_{pos}) - mean(X_{neg})) / norm$
 
 **Bias Selection**
-The optimal bias `b` is found by projecting all data points onto `w` and selecting the threshold `T` that minimizes the number of projected data points for finding the optimal 'b':
+The optimal bias `b` is found by projecting all data points onto `w` and selecting the threshold `T` that minimizes the number of projected data points for finding the optimal `b`:
 
 $H = -p_{pos} * log_2(p_{pos}) - p_{neg} * log_2(p_{neg})$
 
