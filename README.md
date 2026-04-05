@@ -24,7 +24,7 @@ The optimal bias `b` is found by projecting all data points onto `w` and selecti
 
 $H = -p_{pos} * log_2(p_{pos}) - p_{neg} * log_2(p_{neg})$
 
-$b = -T \text{where} T \text{minimizes} (n_{left}*H_{left} + n_{right}*H_{right})/n_{total}$
+$b = -T \text{ where } T \text{ minimizes } (n_{left}*H_{left} + n_{right}*H_{right})/n_{total}$
 
 **Iterative Refinement**
 Each iteration keeps only the points closest to the current decision boundary, focusing the classifier on potential support vectors.
