@@ -17,9 +17,7 @@ This class implements a Support Vector Machine (SVM) from scratch, focusing on f
 # Mathematical Approach 📐
 **Weight Vector Calculation** 
 The weight vector `w` is computed as the normalized difference between class means:
-\[
-w = \frac{\mu_{\text{pos}} - \mu_{\text{neg}}}{\left\| \mu_{\text{pos}} - \mu_{\text{neg}} \right\|}
-\]
+\( w = \frac{\mathrm{mean}(X_{\text{pos}}) - \mathrm{mean}(X_{\text{neg}})}{\| \mathrm{mean}(X_{\text{pos}}) - \mathrm{mean}(X_{\text{neg}}) \|} \)
 **Bias Selection**
 The optimal bias `b` is found by projecting all data points onto `w` and selecting the threshold `T` that minimizes the number of projected data points for finding the optimal 'b':
 \[
