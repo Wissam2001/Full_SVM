@@ -47,6 +47,8 @@ from Full_SVM import Full_SVM
 exp
 ```python
 f_svm = Full_SVM.Full_SVM(num_iterations=5, threshold=0.5)
+f_svm.fit(X_train,y_train)
+...
 ```
 
 
