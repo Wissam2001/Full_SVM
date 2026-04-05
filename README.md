@@ -17,20 +17,15 @@ This class implements a Support Vector Machine (SVM) from scratch, focusing on f
 # Mathematical Approach 📐
 **Weight Vector Calculation** 
 The weight vector `w` is computed as the normalized difference between class means:
-$\mathbf{w} = \frac{\boldsymbol{\mu}_+ - \boldsymbol{\mu}_-}{\|\boldsymbol{\mu}_+ - \boldsymbol{\mu}_-\|} \tag{1}$
+$w = (mean(X_{pos}) - mean(X_{neg})) / norm$
+
 **Bias Selection**
 The optimal bias `b` is found by projecting all data points onto `w` and selecting the threshold `T` that minimizes the number of projected data points for finding the optimal 'b':
-\[
-H(p) = -p_{\text{pos}} \log_2(p_{\text{pos}}) - p_{\text{neg}} \log_2(p_{\text{neg}})
-\]
 
-\[
-T = \arg\min_{t} \left( \frac{n_{\text{left}}}{n_{\text{total}}} H_{\text{left}} + \frac{n_{\text{right}}}{n_{\text{total}}} H_{\text{right}} \right)
-\]
+$H = -p_{pos} * log_2(p_{pos}) - p_{neg} * log_2(p_{neg})$
 
-\[
-b = -T
-\]
+$b = -T \text{where} T \text{minimizes} (n_{left}*H_{left} + n_{right}*H_{right})/n_{total}$
+
 **Iterative Refinement**
 Each iteration keeps only the points closest to the current decision boundary, focusing the classifier on potential support vectors.
 
