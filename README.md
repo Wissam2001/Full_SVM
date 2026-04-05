@@ -40,7 +40,7 @@ Each iteration keeps only the points closest to the current decision boundary, f
 ```bash
 !git clone https://github.com/Wissam2001/Full_SVM.git
 cd Full_SVM
-from Full_SVM import Full_SVM
+import Full_SVM
 ```
 
 **Run the code:**
