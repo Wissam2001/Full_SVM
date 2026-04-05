@@ -40,12 +40,21 @@ Each iteration keeps only the points closest to the current decision boundary, f
 - **itertools:** Used for generating combinations of class pairs in the One-vs-One strategy.
 
 # Installation 💻
-**Clone the repository**
+
+**Clone the repository:**
+```bash
 !git clone https://github.com/Wissam2001/Full_SVM.git
-**Navigate to the directory**
 cd Full_SVM
-**Import the Class**
 from Full_SVM import Full_SVM
+```
+
+**Run the code:**
+exp
+```python
+f_svm = Full_SVM.Full_SVM(num_iterations=5, threshold=0.5)
+```
+
+
 
 **Important⚠️**
 Make sure to install the used libraries for this project
