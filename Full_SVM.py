@@ -51,10 +51,7 @@ class Full_SVM:
 
         # Error handling for empty threshold array
         if XP_threshold.size < 2:
-            raise ValueError(
-                f"Threshold {self.threshold} is too restrictive, resulting in {XP_threshold.size} points.
-                Cannot calculate optimal bias 'b'."
-            )
+            raise ValueError(f"Threshold {self.threshold} is too restrictive, resulting in {XP_threshold.size} points. Cannot calculate optimal bias 'b'.")
 
         #Initialization
         optimal_entropy = float('inf')
