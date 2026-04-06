@@ -57,6 +57,7 @@ f_svm.fit(X_train,y_train)
 Make sure to install the used libraries for this project
 
 # Contributing 🤝
+Further work can be done to:
 - Add cross-validation support
 - Optimize entropy calculation for large datasets
 
