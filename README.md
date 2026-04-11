@@ -44,10 +44,15 @@ import Full_SVM
 ```
 
 **Run the code:**
-exp
 ```python
+...
 f_svm = Full_SVM.Full_SVM(num_iterations=5, threshold=0.5)
 f_svm.fit(X_train,y_train)
+
+# To predict with confidence-weighted voting (using decision values)
+y_pridect = f_svm.predict(X_test)
+#... and for Pure majority voting
+y_pridect = f_svm.predict_with_voting((X_test)
 ...
 ```
 
